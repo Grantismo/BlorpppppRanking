@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Table } from '../../Table';
 import { Player } from '../../../lib/player'
+import H1_2026_players from '../../../../cron/data/10B39D4E-C102-4F4B-961D-2C0540939A52/players.json'
 import H2_2025_players from '../../../../cron/data/F22828D5-E5E2-4A07-83A0-4D6FDCF7FB7C/players.json'
 import H1_2025_players from '../../../../cron/data/8982631B-07FF-4955-915C-CF8EC7AAAB72/players.json'
 import H2_2024_players from '../../../../cron/data/3A6E2789-CD62-4462-9F28-196FC8B05EA2/players.json';
@@ -118,6 +119,7 @@ const PLAYER_TO_CHARACTERS = new Map([
 ])
 
 const SEASONS = {
+  "H1 2026": H1_2026_players,
   "H2 2025": H2_2025_players,
   "H1 2025": H1_2025_players,
   "H2 2024": H2_2024_players,
