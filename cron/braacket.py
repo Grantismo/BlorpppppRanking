@@ -2,8 +2,18 @@ import requests
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 import re
+import time
 
 SIZE = 50
+REQUEST_DELAY_SECONDS = 0.5
+CONNECT_TIMEOUT_SECONDS = 10
+MAX_FETCH_ATTEMPTS = 5
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+USER_AGENT = (
+  "Mozilla/5.0 (X11; Linux x86_64) "
+  "AppleWebKit/537.36 (KHTML, like Gecko) "
+  "Chrome/133.0.0.0 Safari/537.36"
+)
 
 @dataclass
 class H2HSubset:
@@ -36,13 +46,48 @@ corrected = {}
 #  "Polear,Zealot": (0, 2),
 #}
 
+session = requests.Session()
+session.headers.update({"User-Agent": USER_AGENT})
+
+def _page_summary(soup):
+  title = soup.title.get_text(" ", strip=True) if soup.title else ""
+  header = soup.find("h1")
+  header_text = header.get_text(" ", strip=True) if header else ""
+  return " | ".join(part for part in [title, header_text] if part) or "no page title available"
+
+def _fetch_page(url):
+  last_error = None
+  for attempt in range(1, MAX_FETCH_ATTEMPTS + 1):
+    if attempt > 1:
+      time.sleep(REQUEST_DELAY_SECONDS * attempt)
+
+    try:
+      response = session.get(url, timeout=(CONNECT_TIMEOUT_SECONDS, None))
+    except requests.RequestException as exc:
+      last_error = exc
+      continue
+
+    if response.status_code in RETRY_STATUS_CODES:
+      last_error = requests.HTTPError(f"HTTP {response.status_code} for {url}")
+      continue
+
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    if soup.select_one("#league_stats_headtohead") and soup.select(".search-pagination .input-group-addon"):
+      return soup
+
+    last_error = ValueError(f"Unexpected Braacket page for {url}: {_page_summary(soup)}")
+
+  raise RuntimeError(f"Unable to load Braacket head-to-head page after {MAX_FETCH_ATTEMPTS} attempts: {last_error}")
+
 # https://braacket.com/league/:LEAGUE_ID/head2head/:RANKING_ID
 def load_players(league_id, ranking_id):
   def get_h2h_subset(r, c):
     url = (f"https://braacket.com/league/{league_id}/head2head/{ranking_id}?rows={SIZE}&cols={SIZE}"
             + f"&page={r+1}&page_cols={c+1}&data=result&game_character=&country=&search=")
-    page = requests.get(url)
-    s = BeautifulSoup(page.text, "html.parser")
+    if r > 0 or c > 0:
+      time.sleep(REQUEST_DELAY_SECONDS)
+    s = _fetch_page(url)
     col_names = [n.text.strip() for n in s.select("#league_stats_headtohead tbody th:nth-child(2)")]
     rows = s.select("#league_stats_headtohead tbody tr")
     h2h_cells = [[t.text.strip() for t in r.select("td")] for r in rows]
